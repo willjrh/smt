@@ -59,7 +59,7 @@ class EGO(SurrogateBasedApplication):
             "criterion",
             "EI",
             types=str,
-            values=["EI", "SBO", "LCB"],
+            values=["EI", "ECI", "SBO", "LCB"],
             desc="criterion for next evaluation point determination: Expected Improvement, \
             Surrogate-Based Optimization or Lower Confidence Bound",
         )
@@ -98,6 +98,18 @@ class EGO(SurrogateBasedApplication):
         )
         declare("xdoe", None, types=np.ndarray, desc="Initial doe inputs")
         declare("ydoe", None, types=np.ndarray, desc="Initial doe outputs")
+        declare(
+            "g_xdoe",
+            None,
+            types=(list[np.ndarray], None),
+            desc="Initial constraint values",
+        )
+        declare(
+            "g_ydoe",
+            None,
+            types=(list[np.ndarray], None),
+            desc="Initial constraint values",
+        )
         declare("verbose", False, types=bool, desc="Print computation information")
         declare(
             "enable_tunneling",
@@ -110,6 +122,13 @@ class EGO(SurrogateBasedApplication):
             KRG(print_global=False),
             types=(KRG, KPLS, KPLSK, GEKPLS, MGP),
             desc="SMT kriging-based surrogate model used internaly",
+        )
+        # willjrh: Declare the constraint functions, which may be `None`, by default, in fact.
+        declare(
+            "constraints",
+            None,
+            types=(type(None), KRG, KPLS, KPLSK, GEKPLS, MGP),
+            desc="SMT kriging-based constraint surrogate model used internaly",
         )
         self.options.declare(
             "random_state",
@@ -191,6 +210,12 @@ class EGO(SurrogateBasedApplication):
     def log(self, msg):
         if self.options["verbose"]:
             print(msg)
+
+    def ECI(self, points, enable_tunneling=False, x_data=None):
+        # make an EI
+        ei = self.EI(points, enable_tunneling, x_data)
+        # now we do `Probability of Feasibility`
+        return ei
 
     def EI(self, points, enable_tunneling=False, x_data=None):
         """Expected improvement"""
@@ -360,6 +385,8 @@ class EGO(SurrogateBasedApplication):
 
         if criterion == "EI":
             self.obj_k = lambda x: -self.EI(np.atleast_2d(x), enable_tunneling, x_data)
+        elif criterion == "ECI":
+            self.obj_k = lambda x: -self.ECI(np.atleast_2d(x), enable_tunneling, x_data)
         elif criterion == "SBO":
             self.obj_k = lambda x: self.SBO(np.atleast_2d(x))
         elif criterion == "LCB":
